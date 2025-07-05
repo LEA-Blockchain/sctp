@@ -61,7 +61,7 @@ static int _sctp_decoder_read_byte(sctp_decoder_t* dec, uint8_t* byte) {
  */
 static const void* _sctp_decoder_read_data(sctp_decoder_t* dec, size_t size) {
     if (dec->position + size > dec->size) {
-        lea_abort("unexpected end of stream while reading data");
+        lea_abort("unexpected end of stream while reading raw data");
         return NULL;
     }
     const void* ptr = dec->data + dec->position;

@@ -93,17 +93,31 @@ function generateFuzzData() {
 
 // --- Fuzzer Execution ---
 
+let lastWasmLogMessage = null;
+
 const importObject = {
     env: {
         // A dummy handler. We only care if the decoder *crashes*, not what it produces.
         // The signature is (type, dataPtr, size), but we don't need the arguments.
-        __sctp_data_handler: () => {}
+        __sctp_data_handler: () => {},
+        // Provide a logger that reads the string from Wasm memory and stores it.
+        __lea_log: (ptr) => {
+            if (!decMemory) return; // Memory not yet initialized
+            const mem = new Uint8Array(decMemory.buffer);
+            let end = ptr;
+            // Find the null terminator of the string
+            while (mem[end] !== 0) {
+                end++;
+            }
+            lastWasmLogMessage = new TextDecoder("utf-8").decode(mem.subarray(ptr, end));
+        }
     }
 };
 
 async function runFuzzIteration() {
+    lastWasmLogMessage = null; // Reset for each iteration
     const { instance } = await WebAssembly.instantiate(decBuffer, importObject);
-    const decMemory = instance.exports.memory;
+    decMemory = instance.exports.memory; // Assign to the global decMemory
 
     const fuzzInput = generateFuzzData();
 
@@ -122,8 +136,12 @@ async function runFuzzIteration() {
         instance.exports.sctp_decoder_run();
     } catch (e) {
         // An exception (like 'unreachable') means the fuzzer found a crash.
-        // We propagate the error message and exit so the runner can log it.
-        console.error(e.message);
+        // We combine the log message and the runtime error for a compact output.
+        if (lastWasmLogMessage) {
+            console.error(`${lastWasmLogMessage} (${e.message})`);
+        } else {
+            console.error(e.message);
+        }
         process.exit(1);
     }
 }
