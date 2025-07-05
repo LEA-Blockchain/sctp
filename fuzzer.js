@@ -96,26 +96,33 @@ function generateFuzzData() {
 const importObject = {
     env: {
         // A dummy handler. We only care if the decoder *crashes*, not what it produces.
+        // The signature is (type, dataPtr, size), but we don't need the arguments.
         __sctp_data_handler: () => {}
     }
 };
 
 async function runFuzzIteration() {
     const { instance } = await WebAssembly.instantiate(decBuffer, importObject);
-    decInstance = instance;
-    decMemory = decInstance.exports.memory;
+    const decMemory = instance.exports.memory;
 
     const fuzzInput = generateFuzzData();
 
-    const bufferPtr = decInstance.exports.__lea_malloc(fuzzInput.length);
+    // Initialize the decoder and get a pointer to the buffer it allocated.
+    const bufferPtr = instance.exports.sctp_decoder_init(fuzzInput.length);
+    if (bufferPtr === 0) {
+        console.error("Fuzzer: sctp_decoder_init failed to allocate memory.");
+        process.exit(1); // Exit with an error for the runner.
+    }
+
+    // Write the generated fuzz data into the WASM memory at the specified location.
     new Uint8Array(decMemory.buffer, bufferPtr, fuzzInput.length).set(fuzzInput);
 
-    const dec = decInstance.exports.sctp_decoder_init(bufferPtr, fuzzInput.length);
-
     try {
-        decInstance.exports.sctp_decoder_run(dec, 0);
+        // Run the decoder. It operates on the global state we just initialized.
+        instance.exports.sctp_decoder_run();
     } catch (e) {
-        // Propagate the error to the runner
+        // An exception (like 'unreachable') means the fuzzer found a crash.
+        // We propagate the error message and exit so the runner can log it.
         console.error(e.message);
         process.exit(1);
     }

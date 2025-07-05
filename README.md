@@ -1,4 +1,4 @@
-# SCTP-Core: Simple Compact Transaction Protocol for Lea
+# SCTP: Simple Compact Transaction Protocol for Lea
 
 **A secure, minimal, and verifiable implementation of the Simple Compact Transaction Protocol (SCTP) standard, tailored for the Lea blockchain.**
 
@@ -14,11 +14,6 @@ This repository provides the core C implementation of SCTP, a highly efficient b
 
 ## Getting Started
 
-### Prerequisites
-
-*   A C compiler (e.g., GCC, Clang)
-*   `make`
-
 ### Building
 
 The `makefile` provides several targets to build the different WebAssembly modules.
@@ -33,32 +28,9 @@ This will produce the following output files:
 *   `sctp.vm.enc.wasm`
 *   `sctp.vm.dec.wasm`
 
-### Cleaning
-
-To remove all build artifacts, run:
-```bash
-make clean
-```
-
-## Testing
-
-This project includes a test suite that runs in a Node.js environment, exercising the WebAssembly module.
-
-### Prerequisites
-
-*   Node.js
-
-### Running Tests
-
-To run the tests, execute the following command:
-```bash
-node test.js
-```
-This command will build the WASM module and then execute the test suite defined in `test.js`.
-
 ## Fuzzing
 
-The project also includes a fuzzer to help discover edge cases and potential vulnerabilities in the decoder.
+The project includes a fuzzer to help discover edge cases and potential vulnerabilities in the decoder.
 
 ### Running the Fuzzer
 
@@ -71,48 +43,55 @@ The fuzzer will continuously generate and test random data against the decoder a
 
 ## API Usage
 
-The library exposes a simple C API for encoding and decoding data. For detailed information, please see the [API Reference](./api_reference.md).
+The library exposes a simple C API for encoding and decoding data using a global state. For detailed information, please see the [API Reference](./api_reference.md).
 
 ### Encoder Workflow
 
-1.  **Initialize:** Create an encoder instance.
+1.  **Initialize:** Reset the encoder state and set a buffer capacity.
     ```c
-    sctp_encoder_t* enc = sctp_encoder_init(1024); // Initial capacity of 1KB
+    sctp_encoder_init(1024); // Initial capacity of 1KB
     ```
-2.  **Add Data:** Use the `sctp_encoder_add_*` functions to append data to the buffer.
+2.  **Add Data:** Use the `sctp_encoder_add_*` functions to append data.
     ```c
-    sctp_encoder_add_int32(enc, 12345);
-    sctp_encoder_add_uleb128(enc, 9876543210);
+    sctp_encoder_add_int32(12345);
+    sctp_encoder_add_uleb128(9876543210);
     ```
 3.  **Finalize:** Add the End-of-File (EOF) marker.
     ```c
-    sctp_encoder_add_eof(enc);
+    sctp_encoder_add_eof();
     ```
 4.  **Retrieve Data:** Get a pointer to the encoded data and its size.
     ```c
-    const uint8_t* data = sctp_encoder_data(enc);
-    size_t size = sctp_encoder_size(enc);
+    const uint8_t* data = sctp_encoder_data();
+    size_t size = sctp_encoder_size();
     ```
+5.  **Reuse:** To start a new encoding, simply call `sctp_encoder_init()` again.
 
 ### Decoder Workflow
 
-1.  **Implement a Handler:** Create a callback function to process decoded fields.
+1.  **Implement a Handler:** The host environment must provide a callback function to process decoded fields. This function is imported by the WASM module.
     ```c
-    void my_data_handler(sctp_type_t type, const void* data, size_t size, void* user_context) {
-        // Process the data based on its type
-    }
+    // This function is implemented on the host (e.g., in JavaScript)
+    // and imported into the WASM module.
+    void __sctp_data_handler(sctp_type_t type, const void* data, size_t size);
     ```
-2.  **Initialize:** Create a decoder instance with the data to be parsed.
+2.  **Initialize:** Reset the decoder state and get a buffer to write to.
     ```c
-    sctp_decoder_t* dec = sctp_decoder_init(encoded_data, data_size);
+    void* buffer = sctp_decoder_init(encoded_data_size);
     ```
-3.  **Run:** Start the decoding process.
+3.  **Write Data:** The host writes the encoded data into the returned buffer.
     ```c
-    int result = sctp_decoder_run(dec, my_data_handler, NULL);
+    // In the host environment:
+    // copy_data_to_wasm(buffer, encoded_data, encoded_data_size);
+    ```
+4.  **Run:** Start the decoding process.
+    ```c
+    int result = sctp_decoder_run();
     if (result != 0) {
         // Handle decoding error
     }
     ```
+5.  **Reuse:** To decode new data, simply call `sctp_decoder_init()` again.
 
 ## Encoding Specification
 

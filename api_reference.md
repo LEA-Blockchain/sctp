@@ -1,18 +1,12 @@
 # SCTP API Reference
 
-This document outlines the function layout for the SCTP encoder and decoder.
+This document outlines the function layout for the SCTP encoder and decoder. The API operates on a global internal state, meaning you do not need to manage instance handles.
 
 ## Data Types
 
 The API uses the following core structures and types:
 
 ```c
-// Opaque pointer to the encoder's state. Managed by the library.
-typedef struct sctp_encoder sctp_encoder_t;
-
-// Opaque pointer to the decoder's state. Managed by the library.
-typedef struct sctp_decoder sctp_decoder_t;
-
 // Enum defining the 14 data types and EOF marker.
 typedef enum {
     SCTP_TYPE_INT8, SCTP_TYPE_UINT8,
@@ -31,9 +25,11 @@ typedef enum {
 
 ## Decoder API (Callback-Based)
 
+The decoder operates on a global state. Calling `sctp_decoder_init` resets this state for a new decoding session.
+
 ### Callback Handler
 
-The VM must provide a function that matches this signature. The decoder will call it for every field it parses.
+The host environment must provide a function that matches this signature. The decoder will call it for every field it parses.
 
 ```c
 /**
@@ -41,81 +37,87 @@ The VM must provide a function that matches this signature. The decoder will cal
  * @param type The data type of the field found.
  * @param data A pointer to the decoded data in the WASM memory.
  * @param size The size of the data in bytes.
- * @param user_context A pointer to optional user-defined state.
  */
-typedef void (*sctp_data_handler_t)(
-    sctp_type_t type,
-    const void* data,
-    size_t size,
-    void* user_context
-);
+LEA_IMPORT(env, __sctp_data_handler)
+void __sctp_data_handler(sctp_type_t type, const void* data, size_t size);
 ```
 
 ### Functions
 
 ```c
-// Allocates and initializes a new decoder context for a given data buffer.
-sctp_decoder_t* sctp_decoder_init(const void* data, size_t size);
+/**
+ * @brief Initializes the decoder and allocates a buffer for the encoded data.
+ *
+ * This resets the decoder state and allocates a new buffer.
+ *
+ * @param size The size of the data buffer to allocate.
+ * @return A pointer to the start of the writable data buffer.
+ */
+void* sctp_decoder_init(size_t size);
 
-// Resets an existing decoder to parse a new data buffer.
-void sctp_decoder_reset(sctp_decoder_t* dec, const void* data, size_t size);
-
-// Runs the decoder over the buffer, invoking the handler for each field.
-// Returns 0 on success or if EOF is reached, non-zero on error.
-int sctp_decoder_run(sctp_decoder_t* dec, sctp_data_handler_t handler, void* user_context);
+/**
+ * @brief Runs the decoder over the buffer.
+ * @return 0 on success or if EOF is reached, non-zero on error.
+ */
+int sctp_decoder_run(void);
 ```
 
 ### General Workflow (Decoder)
 
-1.  Implement your `sctp_data_handler_t` callback function.
-2.  Create a decoder instance: `sctp_decoder_t* dec = sctp_decoder_init(my_data, data_size);`
-3.  Start parsing: `sctp_decoder_run(dec, my_callback, &my_state);`
-4.  To reuse the decoder object with new data, call `sctp_decoder_reset(dec, new_data, new_size);`.
+1.  Get a buffer from the decoder: `void* buffer = sctp_decoder_init(data_size);`
+2.  Write your encoded data into that `buffer`.
+3.  Start parsing: `sctp_decoder_run();`
+4.  To decode new data, simply call `sctp_decoder_init` again.
 
 ---
 
 ## Encoder API
 
+The encoder operates on a global state. Calling `sctp_encoder_init` resets this state for a new encoding session.
+
 ### Functions
 
 ```c
-// Allocates and initializes a new encoder context with a given buffer capacity.
-sctp_encoder_t* sctp_encoder_init(size_t capacity);
-
-// Resets an existing encoder to be reused, clearing its contents.
-void sctp_encoder_reset(sctp_encoder_t* enc);
+/**
+ * @brief Initializes the encoder with a given buffer capacity.
+ *
+ * This resets the encoder state and allocates a new buffer.
+ *
+ * @param capacity The capacity of the internal buffer to allocate.
+ */
+void sctp_encoder_init(size_t capacity);
 
 // Gets a read-only pointer to the encoded data buffer.
-const uint8_t* sctp_encoder_data(const sctp_encoder_t* enc);
+const uint8_t* sctp_encoder_data(void);
 
 // Gets the current size of the encoded data in bytes.
-size_t sctp_encoder_size(const sctp_encoder_t* enc);
+size_t sctp_encoder_size(void);
 
-// --- Add Functions ---
+// --- Add Functions (operate on the global encoder) ---
 
 // Adds a vector and returns a pointer to the destination buffer for writing.
-void* sctp_encoder_add_vector(sctp_encoder_t* enc, size_t length);
-void sctp_encoder_add_short(sctp_encoder_t* enc, uint8_t value);
-void sctp_encoder_add_int8(sctp_encoder_t* enc, int8_t value);
-void sctp_encoder_add_uint8(sctp_encoder_t* enc, uint8_t value);
-void sctp_encoder_add_int16(sctp_encoder_t* enc, int16_t value);
-void sctp_encoder_add_uint16(sctp_encoder_t* enc, uint16_t value);
-void sctp_encoder_add_int32(sctp_encoder_t* enc, int32_t value);
-void sctp_encoder_add_uint32(sctp_encoder_t* enc, uint32_t value);
-void sctp_encoder_add_int64(sctp_encoder_t* enc, int64_t value);
-void sctp_encoder_add_uint64(sctp_encoder_t* enc, uint64_t value);
-void sctp_encoder_add_uleb128(sctp_encoder_t* enc, uint64_t value);
-void sctp_encoder_add_sleb128(sctp_encoder_t* enc, int64_t value);
-void sctp_encoder_add_float32(sctp_encoder_t* enc, float value);
-void sctp_encoder_add_float64(sctp_encoder_t* enc, double value);
-void sctp_encoder_add_eof(sctp_encoder_t* enc);
+void* sctp_encoder_add_vector(size_t length);
+void sctp_encoder_add_short(uint8_t value);
+void sctp_encoder_add_int8(int8_t value);
+void sctp_encoder_add_uint8(uint8_t value);
+void sctp_encoder_add_int16(int16_t value);
+void sctp_encoder_add_uint16(uint16_t value);
+void sctp_encoder_add_int32(int32_t value);
+void sctp_encoder_add_uint32(uint32_t value);
+void sctp_encoder_add_int64(int64_t value);
+void sctp_encoder_add_uint64(uint64_t value);
+void sctp_encoder_add_uleb128(uint64_t value);
+void sctp_encoder_add_sleb128(int64_t value);
+void sctp_encoder_add_float32(float value);
+void sctp_encoder_add_float64(double value);
+void sctp_encoder_add_eof(void);
 ```
 
 ### General Workflow (Encoder)
 
-1.  Create an encoder: `sctp_encoder_t* enc = sctp_encoder_init(1024);`
-2.  Add data: `sctp_encoder_add_int32(enc, 123);`
-3.  Add a vector: `void* vec_ptr = sctp_encoder_add_vector(enc, 5);` Then, the host writes 5 bytes to `vec_ptr`.
-4.  Finalize: `sctp_encoder_add_eof(enc);`
-5.  Get the result: `const uint8_t* data = sctp_encoder_data(enc);`, `size_t size = sctp_encoder_size(enc);`
-6.  To reuse the encoder, call `sctp_encoder_reset(enc);`.
+1.  Initialize the encoder: `sctp_encoder_init(1024);`
+2.  Add data: `sctp_encoder_add_int32(123);`
+3.  Add a vector: `void* vec_ptr = sctp_encoder_add_vector(5);` Then, the host writes 5 bytes to `vec_ptr`.
+4.  Finalize: `sctp_encoder_add_eof();`
+5.  Get the result: `const uint8_t* data = sctp_encoder_data();`, `size_t size = sctp_encoder_size();`
+6.  To start a new encoding, simply call `sctp_encoder_init` again.

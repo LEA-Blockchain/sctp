@@ -31,6 +31,8 @@ struct sctp_encoder {
     size_t position;    ///< Current write offset in the buffer.
 };
 
+static sctp_encoder_t* g_encoder = NULL;
+
 // --- Utility Functions ---
 
 /**
@@ -121,36 +123,33 @@ static void _sctp_encoder_write_sleb128(sctp_encoder_t* enc, int64_t value) {
 // --- Encoder Public API Implementation ---
 
 LEA_EXPORT(sctp_encoder_init)
-sctp_encoder_t* sctp_encoder_init(size_t capacity) {
-    sctp_encoder_t* enc = malloc(sizeof(sctp_encoder_t));
-    if (!enc) lea_abort("malloc failed for sctp_encoder_t");
+void sctp_encoder_init(size_t capacity) {
+    allocator_reset();
+    g_encoder = malloc(sizeof(sctp_encoder_t));
+    if (!g_encoder) lea_abort("malloc failed for sctp_encoder_t");
 
-    enc->buffer = malloc(capacity);
-    if (!enc->buffer) lea_abort("malloc failed for encoder buffer");
-
-    enc->capacity = capacity;
-    enc->position = 0;
-    return enc;
-}
-
-LEA_EXPORT(sctp_encoder_reset)
-void sctp_encoder_reset(sctp_encoder_t* enc) {
-    if (!enc) return;
-    enc->position = 0;
+    g_encoder->buffer = malloc(capacity);
+    if (!g_encoder->buffer) lea_abort("malloc failed for encoder buffer");
+    g_encoder->capacity = capacity;
+    g_encoder->position = 0;
 }
 
 LEA_EXPORT(sctp_encoder_data)
-const uint8_t* sctp_encoder_data(const sctp_encoder_t* enc) {
-    return enc ? enc->buffer : NULL;
+const uint8_t* sctp_encoder_data(void) {
+    if (!g_encoder) lea_abort("encoder not initialized");
+    return g_encoder->buffer;
 }
 
 LEA_EXPORT(sctp_encoder_size)
-size_t sctp_encoder_size(const sctp_encoder_t* enc) {
-    return enc ? enc->position : 0;
+size_t sctp_encoder_size(void) {
+    if (!g_encoder) lea_abort("encoder not initialized");
+    return g_encoder->position;
 }
 
 LEA_EXPORT(sctp_encoder_add_vector)
-void* sctp_encoder_add_vector(sctp_encoder_t* enc, size_t length) {
+void* sctp_encoder_add_vector(size_t length) {
+    sctp_encoder_t* enc = g_encoder;
+    if (!enc) lea_abort("encoder not initialized");
     if (length < SCTP_VECTOR_LARGE_FLAG) {
         _sctp_encoder_write_header(enc, SCTP_TYPE_VECTOR, (uint8_t)length);
     } else {
@@ -164,11 +163,12 @@ void* sctp_encoder_add_vector(sctp_encoder_t* enc, size_t length) {
 }
 
 LEA_EXPORT(sctp_encoder_add_short)
-void sctp_encoder_add_short(sctp_encoder_t* enc, uint8_t value) {
+void sctp_encoder_add_short(uint8_t value) {
+    if (!g_encoder) lea_abort("encoder not initialized");
     if (value > 15) {
         lea_abort("short value must be <= 15");
     }
-    _sctp_encoder_write_header(enc, SCTP_TYPE_SHORT, value);
+    _sctp_encoder_write_header(g_encoder, SCTP_TYPE_SHORT, value);
 }
 
 /**
@@ -184,9 +184,10 @@ void sctp_encoder_add_short(sctp_encoder_t* enc, uint8_t value) {
  */
 #define DEFINE_ENCODER_ADD_TYPE(name, type, sctp_type) \
 LEA_EXPORT(sctp_encoder_add_##name) \
-void sctp_encoder_add_##name(sctp_encoder_t* enc, type value) { \
-    _sctp_encoder_write_header(enc, sctp_type, 0); \
-    _sctp_encoder_write_data(enc, &value, sizeof(type)); \
+void sctp_encoder_add_##name(type value) { \
+    if (!g_encoder) lea_abort("encoder not initialized"); \
+    _sctp_encoder_write_header(g_encoder, sctp_type, 0); \
+    _sctp_encoder_write_data(g_encoder, &value, sizeof(type)); \
 }
 
 DEFINE_ENCODER_ADD_TYPE(int8, int8_t, SCTP_TYPE_INT8)
@@ -201,18 +202,21 @@ DEFINE_ENCODER_ADD_TYPE(float32, float, SCTP_TYPE_FLOAT32)
 DEFINE_ENCODER_ADD_TYPE(float64, double, SCTP_TYPE_FLOAT64)
 
 LEA_EXPORT(sctp_encoder_add_uleb128)
-void sctp_encoder_add_uleb128(sctp_encoder_t* enc, uint64_t value) {
-    _sctp_encoder_write_header(enc, SCTP_TYPE_ULEB128, 0);
-    _sctp_encoder_write_uleb128(enc, value);
+void sctp_encoder_add_uleb128(uint64_t value) {
+    if (!g_encoder) lea_abort("encoder not initialized");
+    _sctp_encoder_write_header(g_encoder, SCTP_TYPE_ULEB128, 0);
+    _sctp_encoder_write_uleb128(g_encoder, value);
 }
 
 LEA_EXPORT(sctp_encoder_add_sleb128)
-void sctp_encoder_add_sleb128(sctp_encoder_t* enc, int64_t value) {
-    _sctp_encoder_write_header(enc, SCTP_TYPE_SLEB128, 0);
-    _sctp_encoder_write_sleb128(enc, value);
+void sctp_encoder_add_sleb128(int64_t value) {
+    if (!g_encoder) lea_abort("encoder not initialized");
+    _sctp_encoder_write_header(g_encoder, SCTP_TYPE_SLEB128, 0);
+    _sctp_encoder_write_sleb128(g_encoder, value);
 }
 
 LEA_EXPORT(sctp_encoder_add_eof)
-void sctp_encoder_add_eof(sctp_encoder_t* enc) {
-    _sctp_encoder_write_header(enc, SCTP_TYPE_EOF, 0);
+void sctp_encoder_add_eof(void) {
+    if (!g_encoder) lea_abort("encoder not initialized");
+    _sctp_encoder_write_header(g_encoder, SCTP_TYPE_EOF, 0);
 }

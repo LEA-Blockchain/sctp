@@ -1,0 +1,1 @@
+import wasmBinaryDecoder from '../../sctp.mvp.dec.wasm';

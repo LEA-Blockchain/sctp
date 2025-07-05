@@ -31,6 +31,8 @@ struct sctp_decoder {
     size_t position;     ///< Current read offset in the buffer.
 };
 
+static sctp_decoder_t* g_decoder = NULL;
+
 // --- LEB128 Decoding ---
 
 /**
@@ -127,28 +129,33 @@ static int64_t _sctp_decoder_read_sleb128(sctp_decoder_t* dec) {
  * @see sctp_data_handler_t
  */
 LEA_IMPORT(env, __sctp_data_handler)
-void __sctp_data_handler(sctp_type_t type, const void* data, size_t size, void* user_context);
+void __sctp_data_handler(sctp_type_t type, const void* data, size_t size);
 
 // --- Decoder Public API Implementation ---
 
 LEA_EXPORT(sctp_decoder_init)
-sctp_decoder_t* sctp_decoder_init(const void* data, size_t size) {
+void* sctp_decoder_init(size_t size) {
+    allocator_reset();
     sctp_decoder_t* dec = malloc(sizeof(sctp_decoder_t));
     if (!dec) lea_abort("malloc failed for sctp_decoder_t");
-    sctp_decoder_reset(dec, data, size);
-    return dec;
-}
 
-LEA_EXPORT(sctp_decoder_reset)
-void sctp_decoder_reset(sctp_decoder_t* dec, const void* data, size_t size) {
-    if (!dec) return;
-    dec->data = data;
+    dec->data = malloc(size);
+    if (!dec->data) lea_abort("malloc failed for decoder buffer");
+    
     dec->size = size;
     dec->position = 0;
+    
+    // The global pointer is now the handle
+    g_decoder = dec;
+
+    return (void*)dec->data;
 }
 
 LEA_EXPORT(sctp_decoder_run)
-int sctp_decoder_run(sctp_decoder_t* dec, void* user_context) {
+int sctp_decoder_run(void) {
+    sctp_decoder_t* dec = g_decoder;
+    if (!dec) lea_abort("decoder not initialized");
+    
     while (dec->position < dec->size) {
         uint8_t header;
         if (_sctp_decoder_read_byte(dec, &header) != 0) {
@@ -159,7 +166,7 @@ int sctp_decoder_run(sctp_decoder_t* dec, void* user_context) {
         uint8_t meta = (header & SCTP_META_MASK) >> SCTP_META_SHIFT;
 
         if (type == SCTP_TYPE_EOF) {
-            __sctp_data_handler(type, NULL, 0, user_context);
+            __sctp_data_handler(type, NULL, 0);
             return 0;
         }
 
@@ -209,7 +216,8 @@ int sctp_decoder_run(sctp_decoder_t* dec, void* user_context) {
                 lea_abort("unknown sctp type");
                 return -1; // Error
         }
-        __sctp_data_handler(type, data, size, user_context);
+        __sctp_data_handler(type, data, size);
     }
     return 0; // Success
 }
+

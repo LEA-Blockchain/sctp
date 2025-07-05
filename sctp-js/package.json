@@ -1,0 +1,82 @@
+{
+  "name": "@leachain/cte-core",
+  "version": "1.0.4",
+  "description": "JavaScript wrapper for the CTE CORE WASM library providing encoding and decoding capabilities.",
+  "type": "module",
+  "files": [
+    "dist",
+    "types",
+    "README.md"
+  ],
+  "main": "./dist/cte-core.node.cjs",
+  "module": "./dist/cte-core.node.mjs",
+  "browser": "./dist/cte-core.web.js",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "node": {
+        "import": "./dist/cte-core.node.mjs",
+        "require": "./dist/cte-core.node.cjs"
+      },
+      "browser": {
+        "import": "./dist/cte-core.web.js",
+        "script": "./dist/cte-core.web.min.js"
+      },
+      "default": "./dist/cte-core.node.mjs"
+    }
+  },
+  "scripts": {
+    "clean": "del-cli ./dist",
+    "prepare": "lea-rl \"https://github.com/LEA-Blockchain/cte-core/releases/download/v1.0.1/cte-core-v1.0.1-encoder.mvp.wasm.tar.gz\" ./src/ && lea-rl \"https://github.com/LEA-Blockchain/cte-core/releases/download/v1.0.1/cte-core-v1.0.1-decoder.mvp.wasm.tar.gz\" ./src/",
+    "build:node:esm": "esbuild src/index.js --bundle --outfile=dist/cte-core.node.mjs --format=esm --platform=node --loader:.wasm=binary",
+    "build:node:cjs": "esbuild src/index.js --bundle --outfile=dist/cte-core.node.cjs --format=cjs --platform=node --loader:.wasm=binary",
+    "build:browser:esm": "esbuild src/index.js --bundle --outfile=dist/cte-core.web.js --format=esm --platform=browser --loader:.wasm=binary",
+    "build:browser:iife": "esbuild src/index.js --bundle --outfile=dist/cte-core.web.min.js --format=iife --global-name=LEA_CTE_CORE --platform=browser --loader:.wasm=binary --minify",
+    "build:types": "tsc",
+    "build:jsdoc": "jsdoc -c jsdoc.json",
+    "build": "npm run clean && npm run build:types && npm run build:jsdoc && npm run build:node:esm && npm run build:node:cjs && npm run build:browser:esm && npm run build:browser:iife",
+    "test:node:esm": "node ./test/node-esm.test.js",
+    "test:node": "npm run test:node:esm",
+    "test": "npm run test:node",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepublishOnly": "npm run lint && npm run build && npm run test:node"
+  },
+  "author": {
+    "name": "Allwin Ketnawang",
+    "url": "https://getlea.org"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "del-cli": "^6.0.0",
+    "esbuild": "^0.25.3",
+    "eslint": "^9.25.1",
+    "eslint-config-prettier": "^10.1.2",
+    "eslint-plugin-prettier": "^5.2.6",
+    "jsdoc": "^4.0.4",
+    "lea-rl": "^1.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://lea-blockchain.github.io/cte-core-js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LEA-Blockchain/cte-core.git"
+  },
+  "keywords": [
+    "cte",
+    "wasm",
+    "encoder",
+    "decoder",
+    "binary",
+    "serialization",
+    "leachain",
+    "lea"
+  ]
+}

@@ -13,7 +13,7 @@ CFLAGS_WASM_LEA := $(CFLAGS_WASM_BASE) -mnontrapping-fptoint -mbulk-memory -msig
 LEA_INCLUDE_PATH := /usr/local/include/stdlea
 LEA_LIB_PATH := /usr/local/lib
 LEA_MVP_LIB := -lstdlea-mvp
-LEA_VM_LIB := -lstdlea-lea
+LEA_VM_LIB := -lstdlea-vm
 
 # Source files
 SRC_ENC := encoder.c
