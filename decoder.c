@@ -170,8 +170,8 @@ int sctp_decoder_run(void) {
             return 0;
         }
 
-        const void* data = NULL;
-        size_t size = 0;
+        const void* data;
+        size_t size;
 
         switch (type) {
             case SCTP_TYPE_INT8:    size = 1; data = _sctp_decoder_read_data(dec, size); break;
@@ -186,18 +186,14 @@ int sctp_decoder_run(void) {
             case SCTP_TYPE_FLOAT64: size = 8; data = _sctp_decoder_read_data(dec, size); break;
             
             case SCTP_TYPE_ULEB128: {
-                size_t start_pos = dec->position;
-                _sctp_decoder_read_uleb128(dec);
-                size = dec->position - start_pos;
-                data = dec->data + start_pos;
-                break;
+                uint64_t value = _sctp_decoder_read_uleb128(dec);
+                __sctp_data_handler(type, &value, sizeof(value));
+                continue; 
             }
             case SCTP_TYPE_SLEB128: {
-                size_t start_pos = dec->position;
-                _sctp_decoder_read_sleb128(dec);
-                size = dec->position - start_pos;
-                data = dec->data + start_pos;
-                break;
+                int64_t value = _sctp_decoder_read_sleb128(dec);
+                __sctp_data_handler(type, &value, sizeof(value));
+                continue;
             }
             case SCTP_TYPE_SHORT:
                 data = &meta;

@@ -1,56 +1,58 @@
-TARGET_MVP_ENC := sctp.mvp.enc.wasm
-TARGET_MVP_DEC := sctp.mvp.dec.wasm
-TARGET_VM_ENC := sctp.vm.enc.wasm
-TARGET_VM_DEC := sctp.vm.dec.wasm
+# Compiler and LEA settings (aligned with ed25519/makefile.lea)
+STDLEA_CFLAGS   = -I/usr/local/include/stdlea
+STDLEA_LDFLAGS  = -L/usr/local/lib -lstdlea
 
-# Compiler and flags
-CC := clang
-CFLAGS_WASM_BASE := --target=wasm32 -nostdlib -ffreestanding -nobuiltininc -Wl,--no-entry -Os -Wall -Wextra -pedantic
-CFLAGS_WASM_MVP := $(CFLAGS_WASM_BASE)
-CFLAGS_WASM_LEA := $(CFLAGS_WASM_BASE) -mnontrapping-fptoint -mbulk-memory -msign-ext -msimd128 -mtail-call -mreference-types -matomics -mmultivalue -Xclang -target-abi -Xclang experimental-mv
-
-# Lea-specific paths and libraries
-LEA_INCLUDE_PATH := /usr/local/include/stdlea
-LEA_LIB_PATH := /usr/local/lib
-LEA_MVP_LIB := -lstdlea-mvp
-LEA_VM_LIB := -lstdlea-vm
+CFLAGS_WASM_BASE    := --target=wasm32 -ffreestanding -nostdlib -Wl,--no-entry -Os -Wall -Wextra -pedantic
+CFLAGS_WASM_FEATURES:= -mbulk-memory -msign-ext -mmultivalue
+CFLAGS_WASM         = $(CFLAGS_WASM_BASE) $(CFLAGS_WASM_FEATURES) $(STDLEA_CFLAGS) -flto
 
 # Source files
 SRC_ENC := encoder.c
 SRC_DEC := decoder.c
+ALL_SRCS_FOR_FORMAT := encoder.c decoder.c sctp.h
 
-.PHONY: all clean test
+# Targets
+TARGET_ENC := sctp.enc.wasm
+TARGET_DEC := sctp.dec.wasm
 
-all: wasm_mvp wasm_vm
+.PHONY: all clean format check-unicode
 
-# MVP WASM Targets (MVP ABI)
-wasm_mvp: $(TARGET_MVP_ENC) $(TARGET_MVP_DEC)
+all: $(TARGET_ENC) $(TARGET_DEC)
 
-$(TARGET_MVP_ENC): $(SRC_ENC)
-	@echo "Building MVP Encoder: $@"
-	$(CC) $(CFLAGS_WASM_MVP) -I$(LEA_INCLUDE_PATH) -DENV_WASM_MVP -DENABLE_LEA_LOG $(SRC_ENC) -L$(LEA_LIB_PATH) $(LEA_MVP_LIB) -flto -o $@
+# Rule for the encoder
+$(TARGET_ENC): $(SRC_ENC)
+	@echo "Compiling and linking $< to $@"
+	clang $(CFLAGS_WASM) $< $(STDLEA_LDFLAGS) -o $@
+	@echo "Stripping custom sections..."
+	wasm-strip $@
+	@echo "Dumping section and export info:"
+	wasm-objdump -x $@
+	@echo "Build complete: $@"
 
-$(TARGET_MVP_DEC): $(SRC_DEC)
-	@echo "Building MVP Decoder: $@"
-	$(CC) $(CFLAGS_WASM_MVP) -I$(LEA_INCLUDE_PATH) -DENV_WASM_MVP -DENABLE_LEA_LOG $(SRC_DEC) -L$(LEA_LIB_PATH) $(LEA_MVP_LIB) -flto -o $@
-
-# Lea VM WASM Targets (VM ABI)
-wasm_vm: $(TARGET_VM_ENC) $(TARGET_VM_DEC)
-
-$(TARGET_VM_ENC): $(SRC_ENC)
-	@echo "Building VM Encoder: $@"
-	$(CC) $(CFLAGS_WASM_LEA) -I$(LEA_INCLUDE_PATH) -DENV_WASM_VM -DENABLE_LEA_LOG $(SRC_ENC) -L$(LEA_LIB_PATH) $(LEA_VM_LIB) -flto -o $@
-
-$(TARGET_VM_DEC): $(SRC_DEC)
-	@echo "Building VM Decoder: $@"
-	$(CC) $(CFLAGS_WASM_LEA) -I$(LEA_INCLUDE_PATH) -DENV_WASM_VM -DENABLE_LEA_LOG $(SRC_DEC) -L$(LEA_LIB_PATH) $(LEA_VM_LIB) -flto -o $@
+# Rule for the decoder
+$(TARGET_DEC): $(SRC_DEC)
+	@echo "Compiling and linking $< to $@"
+	clang $(CFLAGS_WASM) $< $(STDLEA_LDFLAGS) -o $@
+	@echo "Stripping custom sections..."
+	wasm-strip $@
+	@echo "Dumping section and export info:"
+	wasm-objdump -x $@
+	@echo "Build complete: $@"
 
 # Clean rule
 clean:
-	@echo "Cleaning build artifacts..."
-	rm -f $(TARGET_MVP_ENC) $(TARGET_MVP_DEC) $(TARGET_VM_ENC) $(TARGET_VM_DEC) *.o
+	@echo "Removing build artifacts..."
+	rm -f $(TARGET_ENC) $(TARGET_DEC) *.o
 
-# Test rule
-test: wasm_mvp
-	@echo "Running tests..."
-	@node test.js
+# Quality checks
+format: check-unicode
+	@echo "Formatting source files..."
+	@clang-format -i $(ALL_SRCS_FOR_FORMAT)
+
+check-unicode:
+	@echo "Checking for non-ASCII characters..."
+	@if grep --color=auto -P -n "[^\x00-\x7F]" $(ALL_SRCS_FOR_FORMAT) > /dev/null; then \
+		echo "❌ Unicode characters detected in source files!"; \
+		grep --color=always -P -n "[^\x00-\x7F]" $(ALL_SRCS_FOR_FORMAT); \
+		exit 1; \
+	fi

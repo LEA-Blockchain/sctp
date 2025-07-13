@@ -7,7 +7,7 @@ const MAX_INPUT_SIZE = 30000;   // Max size of a single fuzz input
 const VERBOSE = false;         // Set to true to log every generated input
 
 // --- Load WASM Module ---
-const decBuffer = fs.readFileSync('sctp.mvp.dec.wasm');
+const decBuffer = fs.readFileSync('sctp.dec.wasm');
 let decInstance;
 let decMemory;
 
