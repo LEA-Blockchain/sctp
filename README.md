@@ -16,17 +16,13 @@ This repository provides the core C implementation of SCTP, a highly efficient b
 
 ### Building
 
-The `makefile` provides several targets to build the different WebAssembly modules.
+The `makefile` provides a default target to build the WebAssembly modules for the encoder and decoder.
 
-*   **`make all`**: (Default) Builds all WebAssembly modules (`wasm_mvp` and `wasm_vm`).
-*   **`make wasm_mvp`**: Builds the encoder and decoder for the standard WebAssembly MVP target.
-*   **`make wasm_vm`**: Builds the encoder and decoder for the Lea VM target, which includes more advanced WASM features.
+*   **`make`**: (Default) Builds both `sctp.enc.wasm` and `sctp.dec.wasm`.
 
 This will produce the following output files:
-*   `sctp.mvp.enc.wasm`
-*   `sctp.mvp.dec.wasm`
-*   `sctp.vm.enc.wasm`
-*   `sctp.vm.dec.wasm`
+*   `sctp.enc.wasm`
+*   `sctp.dec.wasm`
 
 ## Fuzzing
 
