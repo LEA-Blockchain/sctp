@@ -12,26 +12,12 @@
 
 // --- Internal Constants ---
 
+#include <stdbool.h>
+
 #define SCTP_TYPE_MASK 0x0F
 #define SCTP_META_MASK 0xF0
 #define SCTP_META_SHIFT 4
 #define SCTP_VECTOR_LARGE_FLAG 0x0F
-
-// --- Internal Struct Definition ---
-
-/**
- * @brief Holds the state of the SCTP decoder.
- *
- * This structure tracks the data buffer being read, its total size, and the
- * current read position. It is not meant to be manipulated directly by the user.
- */
-struct sctp_decoder {
-    const uint8_t* data; ///< Pointer to the input data buffer.
-    size_t size;         ///< Total size of the data buffer in bytes.
-    size_t position;     ///< Current read offset in the buffer.
-};
-
-static sctp_decoder_t* g_decoder = NULL;
 
 // --- LEB128 Decoding ---
 
@@ -136,86 +122,170 @@ void __sctp_data_handler(sctp_type_t type, const void* data, size_t size);
 // --- Decoder Public API Implementation ---
 
 LEA_EXPORT(sctp_decoder_init)
-void* sctp_decoder_init(size_t size) {
-    allocator_reset();
+sctp_decoder_t* sctp_decoder_init(size_t size) {
     sctp_decoder_t* dec = malloc(sizeof(sctp_decoder_t));
     if (!dec) lea_abort("malloc failed for sctp_decoder_t");
 
-    dec->data = malloc(size);
-    if (!dec->data) lea_abort("malloc failed for decoder buffer");
+    void* buffer = malloc(size);
+    if (!buffer) lea_abort("malloc failed for decoder buffer");
     
+    dec->data = buffer;
     dec->size = size;
     dec->position = 0;
-    
-    // The global pointer is now the handle
-    g_decoder = dec;
+    dec->last_type = SCTP_TYPE_EOF;
+    dec->last_size = 0;
+    memset(&dec->last_value, 0, sizeof(sctp_value_t));
+    dec->is_external_buffer = false;
 
+    return dec;
+}
+
+LEA_EXPORT(sctp_decoder_from_buffer)
+sctp_decoder_t* sctp_decoder_from_buffer(const void* buffer, size_t size) {
+    sctp_decoder_t* dec = malloc(sizeof(sctp_decoder_t));
+    if (!dec) lea_abort("malloc failed for sctp_decoder_t");
+
+    dec->data = buffer;
+    dec->size = size;
+    dec->position = 0;
+    dec->last_type = SCTP_TYPE_EOF;
+    dec->last_size = 0;
+    memset(&dec->last_value, 0, sizeof(sctp_value_t));
+    dec->is_external_buffer = true;
+
+    return dec;
+}
+
+LEA_EXPORT(sctp_decoder_get_buffer)
+void* sctp_decoder_get_buffer(sctp_decoder_t* dec) {
+    if (!dec || dec->is_external_buffer) {
+        return NULL;
+    }
+    // Safe to cast away const because we know this buffer was created
+    // for writing by sctp_decoder_init.
     return (void*)dec->data;
 }
 
+LEA_EXPORT(sctp_decoder_next)
+sctp_type_t sctp_decoder_next(sctp_decoder_t* dec) {
+    if (!dec) lea_abort("decoder not initialized");
+
+    if (dec->position >= dec->size) {
+        dec->last_type = SCTP_TYPE_EOF;
+        dec->last_size = 0;
+        return SCTP_TYPE_EOF;
+    }
+
+    uint8_t header;
+    if (_sctp_decoder_read_byte(dec, &header) != 0) {
+        dec->last_type = SCTP_TYPE_EOF;
+        dec->last_size = 0;
+        return SCTP_TYPE_EOF; // Clean EOF
+    }
+
+    sctp_type_t type = (sctp_type_t)(header & SCTP_TYPE_MASK);
+    uint8_t meta = (header & SCTP_META_MASK) >> SCTP_META_SHIFT;
+
+    dec->last_type = type;
+
+    switch (type) {
+        case SCTP_TYPE_INT8:
+            dec->last_size = 1;
+            dec->last_value.as_int8 = *(int8_t*)_sctp_decoder_read_data(dec, 1);
+            break;
+        case SCTP_TYPE_UINT8:
+            dec->last_size = 1;
+            dec->last_value.as_uint8 = *(uint8_t*)_sctp_decoder_read_data(dec, 1);
+            break;
+        case SCTP_TYPE_INT16:
+            dec->last_size = 2;
+            dec->last_value.as_int16 = *(int16_t*)_sctp_decoder_read_data(dec, 2);
+            break;
+        case SCTP_TYPE_UINT16:
+            dec->last_size = 2;
+            dec->last_value.as_uint16 = *(uint16_t*)_sctp_decoder_read_data(dec, 2);
+            break;
+        case SCTP_TYPE_INT32:
+            dec->last_size = 4;
+            dec->last_value.as_int32 = *(int32_t*)_sctp_decoder_read_data(dec, 4);
+            break;
+        case SCTP_TYPE_UINT32:
+            dec->last_size = 4;
+            dec->last_value.as_uint32 = *(uint32_t*)_sctp_decoder_read_data(dec, 4);
+            break;
+        case SCTP_TYPE_INT64:
+            dec->last_size = 8;
+            dec->last_value.as_int64 = *(int64_t*)_sctp_decoder_read_data(dec, 8);
+            break;
+        case SCTP_TYPE_UINT64:
+            dec->last_size = 8;
+            dec->last_value.as_uint64 = *(uint64_t*)_sctp_decoder_read_data(dec, 8);
+            break;
+        case SCTP_TYPE_FLOAT32:
+            dec->last_size = 4;
+            dec->last_value.as_float32 = *(float*)_sctp_decoder_read_data(dec, 4);
+            break;
+        case SCTP_TYPE_FLOAT64:
+            dec->last_size = 8;
+            dec->last_value.as_float64 = *(double*)_sctp_decoder_read_data(dec, 8);
+            break;
+        case SCTP_TYPE_ULEB128:
+            dec->last_value.as_uleb128 = _sctp_decoder_read_uleb128(dec);
+            dec->last_size = sizeof(uint64_t);
+            break;
+        case SCTP_TYPE_SLEB128:
+            dec->last_value.as_sleb128 = _sctp_decoder_read_sleb128(dec);
+            dec->last_size = sizeof(int64_t);
+            break;
+        case SCTP_TYPE_SHORT:
+            dec->last_value.as_short = meta;
+            dec->last_size = 1;
+            break;
+        case SCTP_TYPE_VECTOR:
+            if (meta == SCTP_VECTOR_LARGE_FLAG) {
+                dec->last_size = (size_t)_sctp_decoder_read_uleb128(dec);
+            } else {
+                dec->last_size = meta;
+            }
+            dec->last_value.as_ptr = _sctp_decoder_read_data(dec, dec->last_size);
+            break;
+        case SCTP_TYPE_EOF:
+            dec->last_size = 0;
+            break;
+        default:
+            lea_abort("unknown sctp type");
+    }
+    return type;
+}
+
 LEA_EXPORT(sctp_decoder_run)
-int sctp_decoder_run(void) {
-    sctp_decoder_t* dec = g_decoder;
+int sctp_decoder_run(sctp_decoder_t* dec) {
     if (!dec) lea_abort("decoder not initialized");
     
-    while (dec->position < dec->size) {
-        uint8_t header;
-        if (_sctp_decoder_read_byte(dec, &header) != 0) {
-            return 0; // Clean EOF
-        }
-
-        sctp_type_t type = (sctp_type_t)(header & SCTP_TYPE_MASK);
-        uint8_t meta = (header & SCTP_META_MASK) >> SCTP_META_SHIFT;
-
-        if (type == SCTP_TYPE_EOF) {
-            __sctp_data_handler(type, NULL, 0);
-            return 0;
-        }
-
-        const void* data;
-        size_t size;
-
-        switch (type) {
-            case SCTP_TYPE_INT8:    size = 1; data = _sctp_decoder_read_data(dec, size); break;
-            case SCTP_TYPE_UINT8:   size = 1; data = _sctp_decoder_read_data(dec, size); break;
-            case SCTP_TYPE_INT16:   size = 2; data = _sctp_decoder_read_data(dec, size); break;
-            case SCTP_TYPE_UINT16:  size = 2; data = _sctp_decoder_read_data(dec, size); break;
-            case SCTP_TYPE_INT32:   size = 4; data = _sctp_decoder_read_data(dec, size); break;
-            case SCTP_TYPE_UINT32:  size = 4; data = _sctp_decoder_read_data(dec, size); break;
-            case SCTP_TYPE_INT64:   size = 8; data = _sctp_decoder_read_data(dec, size); break;
-            case SCTP_TYPE_UINT64:  size = 8; data = _sctp_decoder_read_data(dec, size); break;
-            case SCTP_TYPE_FLOAT32: size = 4; data = _sctp_decoder_read_data(dec, size); break;
-            case SCTP_TYPE_FLOAT64: size = 8; data = _sctp_decoder_read_data(dec, size); break;
-            
-            case SCTP_TYPE_ULEB128: {
-                uint64_t value = _sctp_decoder_read_uleb128(dec);
-                __sctp_data_handler(type, &value, sizeof(value));
-                continue; 
-            }
-            case SCTP_TYPE_SLEB128: {
-                int64_t value = _sctp_decoder_read_sleb128(dec);
-                __sctp_data_handler(type, &value, sizeof(value));
-                continue;
-            }
-            case SCTP_TYPE_SHORT:
-                data = &meta;
-                size = 1;
-                break;
+    while (sctp_decoder_next(dec) != SCTP_TYPE_EOF) {
+        const void* data_ptr;
+        // For pointer types, use the pointer directly.
+        // For value types, use the address of the value in the union.
+        switch (dec->last_type) {
             case SCTP_TYPE_VECTOR:
-                if (meta == SCTP_VECTOR_LARGE_FLAG) {
-                    size = (size_t)_sctp_decoder_read_uleb128(dec);
-                } else {
-                    size = meta;
-                }
-                data = _sctp_decoder_read_data(dec, size);
+                data_ptr = dec->last_value.as_ptr;
                 break;
-
+            case SCTP_TYPE_ULEB128:
+                data_ptr = &dec->last_value.as_uleb128;
+                break;
+            case SCTP_TYPE_SLEB128:
+                data_ptr = &dec->last_value.as_sleb128;
+                break;
+            // For all other types, we can take the address of the union member
             default:
-                lea_abort("unknown sctp type");
-                return -1; // Error
+                data_ptr = &dec->last_value;
+                break;
         }
-        __sctp_data_handler(type, data, size);
+        __sctp_data_handler(dec->last_type, data_ptr, dec->last_size);
     }
+    // Final EOF callback
+    __sctp_data_handler(SCTP_TYPE_EOF, NULL, 0);
+
     return 0; // Success
 }
 
