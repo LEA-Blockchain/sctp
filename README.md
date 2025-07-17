@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The Simple Compact Transaction Protocol (SCTP) library provides a highly efficient and straightforward binary serialization format, based on the LIP-0006 specification. It is designed for performance and ease of use, especially in resource-constrained environments like WebAssembly.
+The Simple Compact Transaction Protocol (SCTP) library provides a highly efficient and straightforward binary serialization format, based on the [LIP-0006](https://docs.getlea.org/lips/LIP-0006.html). It is designed for performance and ease of use, especially in resource-constrained environments like WebAssembly.
 
 The library allows you to encode a sequence of typed data fields into a compact byte stream and then decode that stream back into its original data structures. It is written in C and exposes a simple, clean API for both encoding and decoding operations.
 
