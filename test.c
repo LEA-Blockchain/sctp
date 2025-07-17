@@ -14,7 +14,7 @@ void __sctp_data_handler(sctp_type_t type, const void *data, size_t size)
     (void)data;
     (void)size;
     printf("[FAIL] TEST FAILED: __sctp_data_handler called unexpectedly!\n");
-    lea_abort("Handler called unexpectedly");
+    LEA_ABORT();
 }
 
 static void assert_true(bool condition, const char *message)
@@ -22,7 +22,7 @@ static void assert_true(bool condition, const char *message)
     if (!condition)
     {
         printf("[FAIL] TEST FAILED: %s\n", message);
-        lea_abort("Test assertion failed");
+        LEA_ABORT();
     }
 }
 
