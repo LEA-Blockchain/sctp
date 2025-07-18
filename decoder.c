@@ -121,10 +121,12 @@ static int64_t _sctp_decoder_read_sleb128(sctp_decoder_t *dec)
  * @brief Declaration of the imported host function for handling decoded data.
  * @see sctp_data_handler_t
  */
+#ifdef SCTP_CALLBACK_ENABLE
 #ifndef SCTP_HANDLER_PROVIDED
 LEA_IMPORT(env, __sctp_data_handler)
 #endif
 void __sctp_data_handler(sctp_type_t type, const void *data, size_t size);
+#endif
 
 // --- Decoder Public API Implementation ---
 
@@ -280,6 +282,7 @@ sctp_type_t sctp_decoder_next(sctp_decoder_t *dec)
     return type;
 }
 
+#ifdef SCTP_CALLBACK_ENABLE
 LEA_EXPORT(sctp_decoder_run)
 int sctp_decoder_run(sctp_decoder_t *dec)
 {
@@ -314,4 +317,5 @@ int sctp_decoder_run(sctp_decoder_t *dec)
 
     return 0; // Success
 }
+#endif
 

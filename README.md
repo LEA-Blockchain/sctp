@@ -170,13 +170,15 @@ The library is designed to integrate seamlessly with WebAssembly hosts. The prim
 
 ### Compiler Defines
 
-When compiling the library for a Wasm environment that uses the callback model, you must define `SCTP_HANDLER_PROVIDED`.
+When compiling the library, you can use the following preprocessor macros to control its features, particularly for WebAssembly builds.
 
--   **`SCTP_HANDLER_PROVIDED`**: This preprocessor macro signals that the host environment (e.g., JavaScript) will provide the implementation for the data handler callback. This prevents the default (dummy) implementation from being compiled.
+-   **`SCTP_CALLBACK_ENABLE`**: This macro globally enables or disables the callback-based decoding feature. If this macro is not defined, the `sctp_decoder_run` function and its dependency on the `__sctp_data_handler` callback will be completely excluded from the compiled module. This is useful for creating smaller builds when only the stateful iteration model is needed.
+
+-   **`SCTP_HANDLER_PROVIDED`**: This macro is only used when `SCTP_CALLBACK_ENABLE` is also defined. It signals that the host environment (e.g., JavaScript) will provide the implementation for the `__sctp_data_handler` callback, preventing the default C implementation from being included.
 
 ### The Data Handler Callback
 
-The host environment **must** implement and export a function with the following signature. The SCTP decoder will call this function for every data field it successfully parses from the stream.
+If you have enabled the callback feature with `SCTP_CALLBACK_ENABLE`, the host environment **must** implement and export a function with the following signature. The SCTP decoder will call this function for every data field it successfully parses from the stream.
 
 ```c
 /**

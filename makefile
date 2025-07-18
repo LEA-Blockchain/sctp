@@ -24,9 +24,13 @@ TARGET_ENC := sctp.enc.wasm
 TARGET_DEC := sctp.dec.wasm
 TARGET_TEST := test.wasm
 
-.PHONY: all clean format check-unicode
+.PHONY: all clean format check-unicode test
 
-all: $(TARGET_ENC) $(TARGET_DEC)
+all: $(TARGET_ENC) $(TARGET_DEC) test
+
+test: $(TARGET_TEST)
+	@echo "Running test..."
+	npx @leachain/vm-exec test.wasm run_test
 
 $(TARGET_ENC): $(ENC_SRCS) $(HDRS)
 	@echo "Compiling and linking sources to $(TARGET_ENC)..."
@@ -42,7 +46,7 @@ $(TARGET_DEC): $(DEC_SRCS) $(HDRS)
 	@echo "Stripping custom sections..."
 	wasm-strip $(TARGET_DEC)
 
-$(TARGET_TEST): CFLAGS += -DSCTP_HANDLER_PROVIDED
+$(TARGET_TEST): CFLAGS += -DENABLE_LEA_FMT
 $(TARGET_TEST): $(TEST_SRCS) $(HDRS)
 	@echo "Compiling and linking test module to $@"
 	$(CC) $(CFLAGS) $(INCLUDE_PATHS) $(TEST_SRCS) $(SRCS) -o $@
