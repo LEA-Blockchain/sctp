@@ -26,6 +26,85 @@ static void assert_true(bool condition, const char *message)
     }
 }
 
+static void test_raw_add()
+{
+    printf("\n--- 3. Testing sctp_encoder_add_raw with a valid SCTP snippet ---\n");
+    
+    // --- Create the inner SCTP snippet ---
+    allocator_reset();
+    sctp_encoder_init(64);
+    const int16_t snippet_val1 = 42;
+    const uint8_t snippet_val2 = 9;
+    sctp_encoder_add_int16(snippet_val1);
+    sctp_encoder_add_short(snippet_val2);
+    
+    const uint8_t* snippet_ptr = sctp_encoder_data();
+    const size_t snippet_size = sctp_encoder_size();
+    
+    // Copy the snippet to a temporary buffer because the next init will reset the allocator
+    uint8_t raw_data[snippet_size];
+    memcpy(raw_data, snippet_ptr, snippet_size);
+
+    printf("   Created snippet with INT16(%d) and SHORT(%u). Size: %u bytes.\n", snippet_val1, (unsigned int)snippet_val2, (unsigned int)snippet_size);
+
+    // --- Create the main stream and inject the snippet ---
+    sctp_encoder_init(256);
+    const uint32_t val1 = 0xDEADBEEF;
+    const uint32_t val2 = 0xCAFEBABE;
+
+    sctp_encoder_add_uint32(val1);
+    printf("   Encoded UINT32:  0x%x\n", val1);
+
+    sctp_encoder_add_raw(raw_data, snippet_size);
+    printf("   Injected raw SCTP snippet.\n");
+
+    sctp_encoder_add_uint32(val2);
+    printf("   Encoded UINT32:  0x%x\n", val2);
+    
+    sctp_encoder_add_eof();
+    printf("   Encoded EOF\n");
+
+    const uint8_t *encoded_data = sctp_encoder_data();
+    const size_t encoded_size = sctp_encoder_size();
+    printf("\n   Total encoded size: %u bytes.\n", (unsigned int)encoded_size);
+
+    // --- Decode the combined stream and verify all fields ---
+    printf("\n   Decoding combined stream...\n");
+    sctp_decoder_t *dec = sctp_decoder_from_buffer(encoded_data, encoded_size);
+    assert_true(dec != NULL, "Decoder creation failed.");
+
+    // 1. First UINT32
+    sctp_decoder_next(dec);
+    assert_true(dec->last_type == SCTP_TYPE_UINT32, "Type mismatch for first UINT32");
+    assert_true(dec->last_value.as_uint32 == val1, "Value mismatch for first UINT32");
+    printf("   Decoded UINT32:  0x%x\n", dec->last_value.as_uint32);
+
+    // 2. Injected INT16 from snippet
+    sctp_decoder_next(dec);
+    assert_true(dec->last_type == SCTP_TYPE_INT16, "Type mismatch for injected INT16");
+    assert_true(dec->last_value.as_int16 == snippet_val1, "Value mismatch for injected INT16");
+    printf("   Decoded injected INT16: %d\n", dec->last_value.as_int16);
+
+    // 3. Injected SHORT from snippet
+    sctp_decoder_next(dec);
+    assert_true(dec->last_type == SCTP_TYPE_SHORT, "Type mismatch for injected SHORT");
+    assert_true(dec->last_value.as_short == snippet_val2, "Value mismatch for injected SHORT");
+    printf("   Decoded injected SHORT: %u\n", (unsigned int)dec->last_value.as_short);
+
+    // 4. Second UINT32
+    sctp_decoder_next(dec);
+    assert_true(dec->last_type == SCTP_TYPE_UINT32, "Type mismatch for second UINT32");
+    assert_true(dec->last_value.as_uint32 == val2, "Value mismatch for second UINT32");
+    printf("   Decoded UINT32:  0x%x\n", dec->last_value.as_uint32);
+
+    // 5. EOF
+    sctp_decoder_next(dec);
+    assert_true(dec->last_type == SCTP_TYPE_EOF, "Expected EOF at end of combined stream");
+    printf("   Decoded EOF\n");
+
+    printf("\n[OK] Raw add test passed\n");
+}
+
 LEA_EXPORT(run_test) int run_test(void)
 {
     printf(">> Starting SCTP integration test...\n");
@@ -140,5 +219,9 @@ LEA_EXPORT(run_test) int run_test(void)
     printf("   Decoded EOF\n");
 
     printf("\n[OK] TEST PASSED\n");
+
+    test_raw_add();
+
+    printf("\n[OK] ALL TESTS PASSED\n");
     return 0;
 }

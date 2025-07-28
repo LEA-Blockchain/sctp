@@ -185,6 +185,15 @@ void *sctp_encoder_add_vector(size_t length)
     return ptr;
 }
 
+LEA_EXPORT(sctp_encoder_add_raw)
+void sctp_encoder_add_raw(const void* data, size_t length)
+{
+    sctp_encoder_t *enc = g_encoder;
+    if (!enc)
+        LEA_ABORT();
+    _sctp_encoder_write_data(enc, data, length);
+}
+
 LEA_EXPORT(sctp_encoder_add_short)
 void sctp_encoder_add_short(uint8_t value)
 {
