@@ -55,7 +55,8 @@ static void test_raw_add()
     sctp_encoder_add_uint32(val1);
     printf("   Encoded UINT32:  0x%x\n", val1);
 
-    sctp_encoder_add_raw(raw_data, snippet_size);
+    void* raw_ptr = sctp_encoder_add_raw(snippet_size);
+    memcpy(raw_ptr, raw_data, snippet_size);
     printf("   Injected raw SCTP snippet.\n");
 
     sctp_encoder_add_uint32(val2);

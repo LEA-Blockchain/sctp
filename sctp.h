@@ -173,11 +173,11 @@ size_t sctp_encoder_size(void);
 void *sctp_encoder_add_vector(size_t length);
 
 /**
- * @brief Appends raw, unprocessed bytes to the stream.
- * @param data A pointer to the data to append.
+ * @brief Reserves space for raw, unprocessed bytes in the stream and returns a pointer to it.
  * @param length The size of the data in bytes.
+ * @return A writable pointer to the allocated space in the buffer.
  */
-void sctp_encoder_add_raw(const void* data, size_t length);
+void* sctp_encoder_add_raw(size_t length);
 
 /**
  * @brief Appends a short integer (0-15) to the stream.

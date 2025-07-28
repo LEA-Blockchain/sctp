@@ -4,4 +4,5 @@
 **/test
 .editorconfig
 .vscode/
-tmp
+tmp.index
+.index

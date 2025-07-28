@@ -133,6 +133,7 @@ void __sctp_data_handler(sctp_type_t type, const void *data, size_t size);
 LEA_EXPORT(sctp_decoder_init)
 sctp_decoder_t *sctp_decoder_init(size_t size)
 {
+    allocator_reset();
     sctp_decoder_t *dec = malloc(sizeof(sctp_decoder_t));
     if (!dec)
         LEA_ABORT();
